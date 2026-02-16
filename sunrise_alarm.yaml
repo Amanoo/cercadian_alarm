@@ -1,0 +1,223 @@
+blueprint:
+  name: Sunrise Alarm
+  description: >
+    Triggers a light sunrise script at a configured alarm time.
+    Supports conditions, time offset, and pre/post actions.
+  domain: automation
+  input:
+    alarm_start_time:
+      name: 🕒 Start Time
+      description: >-
+        Datetime helper or sensor for the alarm start.
+        Use a time-only helper and a Workday sensor in conditions
+        to control which days the alarm runs.
+      selector:
+        entity:
+          filter:
+            - domain: input_datetime
+            - domain: sensor
+              device_class: timestamp
+          multiple: false
+
+    offset_from_start_time:
+      name: 🏁 Offset From Start Time
+      description: >-
+        Adjust how far before or after the Start Time to begin.
+        Enter in HH:MM:SS format, e.g. "-00:15:00" to start 15 minutes early.
+      default: "-00:00:00"
+      selector:
+        text:
+
+    conditions:
+      name: ✅ Conditions
+      description: >-
+        Additional conditions that must all pass for the alarm to run.
+        Add an OR block inside if you need any-of logic.
+      default: []
+      selector:
+        condition:
+
+    pre_action:
+      name: 🎮 Pre-Action
+      description: An action to perform before the sunrise starts.
+      default: []
+      selector:
+        action: {}
+
+    alarm_script:
+      name: 📄 Sunrise Script
+      description: The Light Sunrise script entity to call.
+      selector:
+        entity:
+          filter:
+            - domain: script
+          multiple: false
+
+    target_light:
+      name: 💡 Target Light
+      description: A single light or group.
+      selector:
+        entity:
+          filter:
+            domain: light
+
+    start_brightness:
+      name: ⭐ Start Brightness (%)
+      description: Starting brightness percentage.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          mode: slider
+
+    start_kelvin:
+      name: ☀️ Start Kelvin
+      description: Starting color temperature (warmest).
+      default: 2500
+      selector:
+        color_temp:
+          unit: kelvin
+
+    target_kelvin_1:
+      name: ☀️ Phase 1 Kelvin
+      description: Target Kelvin at end of phase 1.
+      default: 3000
+      selector:
+        color_temp:
+          unit: kelvin
+
+    max_brightness_1:
+      name: ⭐ Phase 1 Brightness (%)
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          mode: slider
+
+    alarm_length_1:
+      name: ⏰ Phase 1 Duration (min)
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          mode: slider
+
+    target_kelvin_2:
+      name: 🌗 Phase 2 Kelvin
+      default: 4000
+      selector:
+        color_temp:
+          unit: kelvin
+
+    max_brightness_2:
+      name: ⭐ Phase 2 Brightness (%)
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          mode: slider
+
+    alarm_length_2:
+      name: ⏰ Phase 2 Duration (min)
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          mode: slider
+
+    target_kelvin_3:
+      name: 🌑 Phase 3 Kelvin
+      default: 6500
+      selector:
+        color_temp:
+          unit: kelvin
+
+    max_brightness_3:
+      name: ⭐ Phase 3 Brightness (%)
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          mode: slider
+
+    alarm_length_3:
+      name: ⏰ Phase 3 Duration (min)
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          mode: slider
+
+    light_timeout:
+      name: ⏱️ Light Timeout (min)
+      description: >-
+        Turn off the light this many minutes after phase 3 finishes.
+        Set to 0 to leave the light on.
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          mode: slider
+
+    post_action:
+      name: 🎮 Post-Action
+      description: An action to run after the sunrise script finishes.
+      default: []
+      selector:
+        action: {}
+
+trigger:
+  - trigger: time
+    at:
+      entity_id: !input alarm_start_time
+      offset: !input offset_from_start_time
+
+condition:
+  condition: and
+  conditions: !input conditions
+
+action:
+  # Pre-action
+  - choose:
+      - conditions: []
+        sequence: !input pre_action
+
+  # Call the sunrise script with all phase parameters
+  - action: !input alarm_script
+    data:
+      target_light: !input target_light
+      start_kelvin: !input start_kelvin
+      start_brightness_pct: !input start_brightness
+      target_kelvin_1: !input target_kelvin_1
+      max_brightness_pct_1: !input max_brightness_1
+      duration_1: !input alarm_length_1
+      target_kelvin_2: !input target_kelvin_2
+      max_brightness_pct_2: !input max_brightness_2
+      duration_2: !input alarm_length_2
+      target_kelvin_3: !input target_kelvin_3
+      max_brightness_pct_3: !input max_brightness_3
+      duration_3: !input alarm_length_3
+      light_timeout: !input light_timeout
+
+  # Post-action
+  - choose:
+      - conditions: []
+        sequence: !input post_action
+
+mode: parallel
