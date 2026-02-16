@@ -1,0 +1,195 @@
+blueprint:
+  name: Light Sunrise (Simple)
+  description: >
+    Gradually turns on a light in 3 phases using long transitions.
+    Each phase issues a single light.turn_on command with a transition
+    matching the phase duration. No looping — relies on the light firmware
+    to handle smooth transitions. Companion to the Sunrise Alarm automation.
+  domain: script
+  homeassistant:
+    min_version: 2024.9.0
+
+fields:
+  target_light:
+    name: Target Light
+    description: A single light or group to control
+    selector:
+      entity:
+        filter:
+          domain: light
+
+  start_kelvin:
+    name: Start Kelvin
+    description: Starting color temperature (warmest)
+    default: 2500
+    selector:
+      color_temp:
+        unit: kelvin
+
+  start_brightness_pct:
+    name: Start Brightness (%)
+    description: Starting brightness percentage
+    default: 1
+    selector:
+      number:
+        min: 1
+        max: 100
+
+  target_kelvin_1:
+    name: Phase 1 Kelvin
+    description: Target color temperature at end of phase 1
+    default: 3000
+    selector:
+      color_temp:
+        unit: kelvin
+
+  max_brightness_pct_1:
+    name: Phase 1 Brightness (%)
+    description: Target brightness at end of phase 1
+    default: 10
+    selector:
+      number:
+        min: 1
+        max: 100
+
+  duration_1:
+    name: Phase 1 Duration (min)
+    description: Duration of phase 1 transition in minutes
+    default: 10
+    selector:
+      number:
+        min: 1
+        max: 60
+
+  target_kelvin_2:
+    name: Phase 2 Kelvin
+    description: Target color temperature at end of phase 2
+    default: 4000
+    selector:
+      color_temp:
+        unit: kelvin
+
+  max_brightness_pct_2:
+    name: Phase 2 Brightness (%)
+    description: Target brightness at end of phase 2
+    default: 50
+    selector:
+      number:
+        min: 1
+        max: 100
+
+  duration_2:
+    name: Phase 2 Duration (min)
+    description: Duration of phase 2 transition in minutes
+    default: 10
+    selector:
+      number:
+        min: 1
+        max: 60
+
+  target_kelvin_3:
+    name: Phase 3 Kelvin
+    description: Target color temperature at end of phase 3
+    default: 6500
+    selector:
+      color_temp:
+        unit: kelvin
+
+  max_brightness_pct_3:
+    name: Phase 3 Brightness (%)
+    description: Target brightness at end of phase 3
+    default: 100
+    selector:
+      number:
+        min: 1
+        max: 100
+
+  duration_3:
+    name: Phase 3 Duration (min)
+    description: Duration of phase 3 transition in minutes
+    default: 5
+    selector:
+      number:
+        min: 1
+        max: 60
+
+  light_timeout:
+    name: Light Timeout (min)
+    description: >-
+      Minutes to wait after phase 3 completes before turning the light off.
+      Set to 0 to leave the light on.
+    default: 5
+    selector:
+      number:
+        min: 0
+        max: 60
+
+sequence:
+  # Turn on at starting values (instant)
+  - action: light.turn_on
+    target:
+      entity_id: "{{ target_light }}"
+    data:
+      brightness_pct: "{{ start_brightness_pct }}"
+      color_temp_kelvin: "{{ start_kelvin }}"
+
+  # Brief pause to let the light settle
+  - delay:
+      seconds: 2
+
+  # Phase 1
+  - action: light.turn_on
+    target:
+      entity_id: "{{ target_light }}"
+    data:
+      brightness_pct: "{{ max_brightness_pct_1 }}"
+      color_temp_kelvin: "{{ target_kelvin_1 }}"
+      transition: "{{ duration_1 | int * 60 }}"
+
+  - delay:
+      minutes: "{{ duration_1 }}"
+
+  # Phase 2 (only if light is still on)
+  - if:
+      - condition: template
+        value_template: "{{ not is_state(target_light, 'off') }}"
+    then:
+      - action: light.turn_on
+        target:
+          entity_id: "{{ target_light }}"
+        data:
+          brightness_pct: "{{ max_brightness_pct_2 }}"
+          color_temp_kelvin: "{{ target_kelvin_2 }}"
+          transition: "{{ duration_2 | int * 60 }}"
+
+      - delay:
+          minutes: "{{ duration_2 }}"
+
+  # Phase 3 (only if light is still on)
+  - if:
+      - condition: template
+        value_template: "{{ not is_state(target_light, 'off') }}"
+    then:
+      - action: light.turn_on
+        target:
+          entity_id: "{{ target_light }}"
+        data:
+          brightness_pct: "{{ max_brightness_pct_3 }}"
+          color_temp_kelvin: "{{ target_kelvin_3 }}"
+          transition: "{{ duration_3 | int * 60 }}"
+
+      - delay:
+          minutes: "{{ duration_3 }}"
+
+  # Timeout: turn off after delay (if enabled and light still on)
+  - if:
+      - condition: template
+        value_template: "{{ light_timeout | int > 0 and not is_state(target_light, 'off') }}"
+    then:
+      - delay:
+          minutes: "{{ light_timeout }}"
+      - action: light.turn_off
+        target:
+          entity_id: "{{ target_light }}"
+
+mode: parallel
