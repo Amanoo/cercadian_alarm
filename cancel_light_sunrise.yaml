@@ -1,0 +1,78 @@
+blueprint:
+  name: Cancel Light Sunrise on Manual Change
+  description: >
+    Cancels a running Light Sunrise script when a significant manual
+    brightness or color temperature change is detected on the target light.
+  domain: automation
+  input:
+    target_light:
+      name: 💡 Target Light
+      description: The light to monitor for manual changes.
+      selector:
+        entity:
+          filter:
+            domain: light
+
+    sunrise_script:
+      name: 📄 Sunrise Script
+      description: The Light Sunrise script entity to cancel.
+      default: script.light_sunrise
+      selector:
+        entity:
+          filter:
+            domain: script
+
+    brightness_threshold:
+      name: 🔆 Brightness Threshold (%)
+      description: >-
+        Cancel if brightness changes by more than this percentage in one
+        state update. 10% = 25.5 raw brightness units.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+          step: 1
+          mode: slider
+
+    kelvin_threshold:
+      name: 🌡️ Kelvin Threshold
+      description: Cancel if color temperature changes by more than this many Kelvin in one state update.
+      default: 100
+      selector:
+        number:
+          min: 10
+          max: 500
+          step: 10
+          mode: slider
+
+variables:
+  sunrise_script_entity: !input sunrise_script
+  bright_threshold: !input brightness_threshold
+  kelv_threshold: !input kelvin_threshold
+
+triggers:
+  - entity_id: !input target_light
+    trigger: state
+
+conditions:
+  # Only act if the sunrise script is currently running
+  - condition: template
+    value_template: "{{ states(sunrise_script_entity) == 'on' }}"
+  # Detect a significant manual change
+  - condition: template
+    value_template: >
+      {% set old_brightness = trigger.from_state.attributes.brightness | int(0) %}
+      {% set new_brightness = trigger.to_state.attributes.brightness | int(0) %}
+      {% set old_kelvin = trigger.from_state.attributes.color_temp_kelvin | int(0) %}
+      {% set new_kelvin = trigger.to_state.attributes.color_temp_kelvin | int(0) %}
+      {% set brightness_diff = (new_brightness - old_brightness) | abs %}
+      {% set kelvin_diff = (new_kelvin - old_kelvin) | abs %}
+      {{ brightness_diff > (255 * bright_threshold / 100) or kelvin_diff > kelv_threshold }}
+
+actions:
+  - target:
+      entity_id: "{{ sunrise_script_entity }}"
+    action: script.turn_off
+
+mode: single
