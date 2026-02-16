@@ -1,8 +1,11 @@
 blueprint:
   name: Cancel Light Sunrise on Manual Change
   description: >
-    Cancels a running Light Sunrise script when a significant manual
-    brightness or color temperature change is detected on the target light.
+    Cancels a running Light Sunrise script when the user manually changes
+    the target light. Uses Home Assistant context to distinguish user
+    changes from script-driven changes — any change made through the HA
+    UI or API cancels immediately, regardless of size. A fallback threshold
+    catches physical switch / remote changes that lack HA context.
   domain: automation
   input:
     target_light:
@@ -22,12 +25,13 @@ blueprint:
           filter:
             domain: script
 
-    brightness_threshold:
-      name: 🔆 Brightness Threshold (%)
+    physical_brightness_threshold:
+      name: 🔆 Physical Change Brightness Threshold (%)
       description: >-
-        Cancel if brightness changes by more than this percentage in one
-        state update. 10% = 25.5 raw brightness units.
-      default: 10
+        Fallback threshold for physical switch / remote changes that
+        have no HA context. Changes via the HA UI always cancel instantly
+        regardless of this value.
+      default: 3
       selector:
         number:
           min: 1
@@ -35,10 +39,12 @@ blueprint:
           step: 1
           mode: slider
 
-    kelvin_threshold:
-      name: 🌡️ Kelvin Threshold
-      description: Cancel if color temperature changes by more than this many Kelvin in one state update.
-      default: 100
+    physical_kelvin_threshold:
+      name: 🌡️ Physical Change Kelvin Threshold
+      description: >-
+        Fallback Kelvin threshold for physical / remote changes.
+        Changes via the HA UI always cancel instantly regardless of this value.
+      default: 30
       selector:
         number:
           min: 10
@@ -48,27 +54,43 @@ blueprint:
 
 variables:
   sunrise_script_entity: !input sunrise_script
-  bright_threshold: !input brightness_threshold
-  kelv_threshold: !input kelvin_threshold
+  bright_threshold: !input physical_brightness_threshold
+  kelv_threshold: !input physical_kelvin_threshold
 
 triggers:
   - entity_id: !input target_light
     trigger: state
 
 conditions:
-  # Only act if the sunrise script is currently running
+  # Script must be running
   - condition: template
     value_template: "{{ states(sunrise_script_entity) == 'on' }}"
-  # Detect a significant manual change
+
+  # Ignore changes caused by automations / scripts (the sunrise script itself)
   - condition: template
     value_template: >
-      {% set old_brightness = trigger.from_state.attributes.brightness | int(0) %}
-      {% set new_brightness = trigger.to_state.attributes.brightness | int(0) %}
-      {% set old_kelvin = trigger.from_state.attributes.color_temp_kelvin | int(0) %}
-      {% set new_kelvin = trigger.to_state.attributes.color_temp_kelvin | int(0) %}
-      {% set brightness_diff = (new_brightness - old_brightness) | abs %}
-      {% set kelvin_diff = (new_kelvin - old_kelvin) | abs %}
-      {{ brightness_diff > (255 * bright_threshold / 100) or kelvin_diff > kelv_threshold }}
+      {{ trigger.to_state.context.parent_id is none
+         or trigger.to_state.context.parent_id == '' }}
+
+  # Cancel on:
+  #   - Any user change via HA UI/API (user_id is set) — no threshold
+  #   - Light turned off by any means
+  #   - Physical/external change exceeding the fallback threshold
+  - condition: template
+    value_template: >
+      {% set is_user = trigger.to_state.context.user_id is not none
+                        and trigger.to_state.context.user_id != '' %}
+      {% set is_off = trigger.to_state.state == 'off' %}
+      {% if is_user or is_off %}
+        true
+      {% else %}
+        {% set old_bri = trigger.from_state.attributes.brightness | int(0) %}
+        {% set new_bri = trigger.to_state.attributes.brightness | int(0) %}
+        {% set old_k = trigger.from_state.attributes.color_temp_kelvin | int(0) %}
+        {% set new_k = trigger.to_state.attributes.color_temp_kelvin | int(0) %}
+        {{ (new_bri - old_bri) | abs > (255 * bright_threshold / 100)
+           or (new_k - old_k) | abs > kelv_threshold }}
+      {% endif %}
 
 actions:
   - target:
