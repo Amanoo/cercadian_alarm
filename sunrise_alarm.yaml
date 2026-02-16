@@ -87,6 +87,13 @@ blueprint:
           step: 1
           mode: slider
 
+    additional_actions:
+      name: 🎮 Additional Actions
+      description: Optional actions to run when the automation triggers (before the light turns on).
+      default: []
+      selector:
+        action: {}
+
 
 trigger:
   - trigger: time
@@ -107,6 +114,11 @@ variables:
   end_kelvin: !input end_kelvin
 
 action:
+  # Optional additional actions
+  - choose:
+      - conditions: []
+        sequence: !input additional_actions
+
   # Turn on at starting values
   - service: light.turn_on
     target:
