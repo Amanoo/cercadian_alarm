@@ -110,6 +110,11 @@ condition:
   condition: and
   conditions: !input conditions
 
+variables:
+  target_light: !input target_light
+  duration: !input duration
+  light_timeout: !input light_timeout
+
 action:
   # Turn on at starting values
   - action: light.turn_on
@@ -130,23 +135,18 @@ action:
       brightness_pct: !input end_brightness
       color_temp_kelvin: !input end_kelvin
       transition: "{{ duration | int * 60 }}"
-    variables:
-      duration: !input duration
 
   # Wait for the transition to finish
   - delay:
-      minutes: !input duration
+      minutes: "{{ duration }}"
 
   # Optional timeout
   - if:
       - condition: template
         value_template: "{{ light_timeout | int > 0 and not is_state(target_light, 'off') }}"
-        variables:
-          light_timeout: !input light_timeout
-          target_light: !input target_light
     then:
       - delay:
-          minutes: !input light_timeout
+          minutes: "{{ light_timeout }}"
       - action: light.turn_off
         target:
           entity_id: !input target_light
