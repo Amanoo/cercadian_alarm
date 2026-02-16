@@ -1,16 +1,14 @@
 blueprint:
-  name: Sunrise Alarm
+  name: Light Sunrise
   description: >
-    Triggers a light sunrise script at a configured alarm time.
-    Supports conditions, time offset, and pre/post actions.
+    Turns on a light at a starting brightness and color temperature, then
+    transitions to an end brightness and color temperature over a set duration
+    using a single light.turn_on command with a long transition.
   domain: automation
   input:
     alarm_start_time:
       name: 🕒 Start Time
-      description: >-
-        Datetime helper or sensor for the alarm start.
-        Use a time-only helper and a Workday sensor in conditions
-        to control which days the alarm runs.
+      description: Datetime helper or timestamp sensor for the alarm start.
       selector:
         entity:
           filter:
@@ -20,38 +18,19 @@ blueprint:
           multiple: false
 
     offset_from_start_time:
-      name: 🏁 Offset From Start Time
+      name: 🏁 Offset
       description: >-
-        Adjust how far before or after the Start Time to begin.
-        Enter in HH:MM:SS format, e.g. "-00:15:00" to start 15 minutes early.
+        Offset from start time, e.g. "-00:15:00" to start 15 minutes early.
       default: "-00:00:00"
       selector:
         text:
 
     conditions:
       name: ✅ Conditions
-      description: >-
-        Additional conditions that must all pass for the alarm to run.
-        Add an OR block inside if you need any-of logic.
+      description: Additional conditions that must pass for the alarm to run.
       default: []
       selector:
         condition:
-
-    pre_action:
-      name: 🎮 Pre-Action
-      description: An action to perform before the sunrise starts.
-      default: []
-      selector:
-        action: {}
-
-    alarm_script:
-      name: 📄 Sunrise Script
-      description: The Light Sunrise script entity to call.
-      selector:
-        entity:
-          filter:
-            - domain: script
-          multiple: false
 
     target_light:
       name: 💡 Target Light
@@ -63,7 +42,6 @@ blueprint:
 
     start_brightness:
       name: ⭐ Start Brightness (%)
-      description: Starting brightness percentage.
       default: 1
       selector:
         number:
@@ -74,76 +52,14 @@ blueprint:
 
     start_kelvin:
       name: ☀️ Start Kelvin
-      description: Starting color temperature (warmest).
+      description: Starting color temperature (warm).
       default: 2500
       selector:
         color_temp:
           unit: kelvin
 
-    target_kelvin_1:
-      name: ☀️ Phase 1 Kelvin
-      description: Target Kelvin at end of phase 1.
-      default: 3000
-      selector:
-        color_temp:
-          unit: kelvin
-
-    max_brightness_1:
-      name: ⭐ Phase 1 Brightness (%)
-      default: 10
-      selector:
-        number:
-          min: 1
-          max: 100
-          step: 1
-          mode: slider
-
-    alarm_length_1:
-      name: ⏰ Phase 1 Duration (min)
-      default: 10
-      selector:
-        number:
-          min: 1
-          max: 60
-          step: 1
-          mode: slider
-
-    target_kelvin_2:
-      name: 🌗 Phase 2 Kelvin
-      default: 4000
-      selector:
-        color_temp:
-          unit: kelvin
-
-    max_brightness_2:
-      name: ⭐ Phase 2 Brightness (%)
-      default: 50
-      selector:
-        number:
-          min: 1
-          max: 100
-          step: 1
-          mode: slider
-
-    alarm_length_2:
-      name: ⏰ Phase 2 Duration (min)
-      default: 10
-      selector:
-        number:
-          min: 1
-          max: 60
-          step: 1
-          mode: slider
-
-    target_kelvin_3:
-      name: 🌑 Phase 3 Kelvin
-      default: 6500
-      selector:
-        color_temp:
-          unit: kelvin
-
-    max_brightness_3:
-      name: ⭐ Phase 3 Brightness (%)
+    end_brightness:
+      name: 🌟 End Brightness (%)
       default: 100
       selector:
         number:
@@ -152,9 +68,18 @@ blueprint:
           step: 1
           mode: slider
 
-    alarm_length_3:
-      name: ⏰ Phase 3 Duration (min)
-      default: 5
+    end_kelvin:
+      name: 🌑 End Kelvin
+      description: Final color temperature (cool).
+      default: 6500
+      selector:
+        color_temp:
+          unit: kelvin
+
+    duration:
+      name: ⏰ Duration (min)
+      description: How long the transition takes in minutes.
+      default: 15
       selector:
         number:
           min: 1
@@ -165,22 +90,15 @@ blueprint:
     light_timeout:
       name: ⏱️ Light Timeout (min)
       description: >-
-        Turn off the light this many minutes after phase 3 finishes.
-        Set to 0 to leave the light on.
-      default: 5
+        Turn off the light this many minutes after the transition finishes.
+        Set to 0 to leave it on.
+      default: 0
       selector:
         number:
           min: 0
           max: 60
           step: 1
           mode: slider
-
-    post_action:
-      name: 🎮 Post-Action
-      description: An action to run after the sunrise script finishes.
-      default: []
-      selector:
-        action: {}
 
 trigger:
   - trigger: time
@@ -193,31 +111,44 @@ condition:
   conditions: !input conditions
 
 action:
-  # Pre-action
-  - choose:
-      - conditions: []
-        sequence: !input pre_action
-
-  # Call the sunrise script with all phase parameters
-  - action: !input alarm_script
+  # Turn on at starting values
+  - action: light.turn_on
+    target:
+      entity_id: !input target_light
     data:
-      target_light: !input target_light
-      start_kelvin: !input start_kelvin
-      start_brightness_pct: !input start_brightness
-      target_kelvin_1: !input target_kelvin_1
-      max_brightness_pct_1: !input max_brightness_1
-      duration_1: !input alarm_length_1
-      target_kelvin_2: !input target_kelvin_2
-      max_brightness_pct_2: !input max_brightness_2
-      duration_2: !input alarm_length_2
-      target_kelvin_3: !input target_kelvin_3
-      max_brightness_pct_3: !input max_brightness_3
-      duration_3: !input alarm_length_3
-      light_timeout: !input light_timeout
+      brightness_pct: !input start_brightness
+      color_temp_kelvin: !input start_kelvin
 
-  # Post-action
-  - choose:
-      - conditions: []
-        sequence: !input post_action
+  - delay:
+      seconds: 2
+
+  # Transition to end values
+  - action: light.turn_on
+    target:
+      entity_id: !input target_light
+    data:
+      brightness_pct: !input end_brightness
+      color_temp_kelvin: !input end_kelvin
+      transition: "{{ duration | int * 60 }}"
+    variables:
+      duration: !input duration
+
+  # Wait for the transition to finish
+  - delay:
+      minutes: !input duration
+
+  # Optional timeout
+  - if:
+      - condition: template
+        value_template: "{{ light_timeout | int > 0 and not is_state(target_light, 'off') }}"
+        variables:
+          light_timeout: !input light_timeout
+          target_light: !input target_light
+    then:
+      - delay:
+          minutes: !input light_timeout
+      - action: light.turn_off
+        target:
+          entity_id: !input target_light
 
 mode: parallel
