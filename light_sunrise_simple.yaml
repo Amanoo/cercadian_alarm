@@ -29,10 +29,10 @@ fields:
   start_brightness_pct:
     name: Start Brightness (%)
     description: Starting brightness percentage
-    default: 1
+    default: 0
     selector:
       number:
-        min: 1
+        min: 0
         max: 100
 
   target_kelvin_1:
