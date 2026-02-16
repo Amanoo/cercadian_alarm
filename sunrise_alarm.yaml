@@ -114,26 +114,30 @@ variables:
   target_light: !input target_light
   duration: !input duration
   light_timeout: !input light_timeout
+  start_brightness: !input start_brightness
+  start_kelvin: !input start_kelvin
+  end_brightness: !input end_brightness
+  end_kelvin: !input end_kelvin
 
 action:
   # Turn on at starting values
-  - action: light.turn_on
+  - service: light.turn_on
     target:
       entity_id: !input target_light
     data:
-      brightness_pct: !input start_brightness
-      color_temp_kelvin: !input start_kelvin
+      brightness_pct: "{{ start_brightness }}"
+      color_temp_kelvin: "{{ start_kelvin }}"
 
   - delay:
       seconds: 2
 
   # Transition to end values
-  - action: light.turn_on
+  - service: light.turn_on
     target:
       entity_id: !input target_light
     data:
-      brightness_pct: !input end_brightness
-      color_temp_kelvin: !input end_kelvin
+      brightness_pct: "{{ end_brightness }}"
+      color_temp_kelvin: "{{ end_kelvin }}"
       transition: "{{ duration | int * 60 }}"
 
   # Wait for the transition to finish
@@ -147,7 +151,7 @@ action:
     then:
       - delay:
           minutes: "{{ light_timeout }}"
-      - action: light.turn_off
+      - service: light.turn_off
         target:
           entity_id: !input target_light
 
