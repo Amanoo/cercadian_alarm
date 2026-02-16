@@ -87,18 +87,6 @@ blueprint:
           step: 1
           mode: slider
 
-    light_timeout:
-      name: ⏱️ Light Timeout (min)
-      description: >-
-        Turn off the light this many minutes after the transition finishes.
-        Set to 0 to leave it on.
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 60
-          step: 1
-          mode: slider
 
 trigger:
   - trigger: time
@@ -113,7 +101,6 @@ condition:
 variables:
   target_light: !input target_light
   duration: !input duration
-  light_timeout: !input light_timeout
   start_brightness: !input start_brightness
   start_kelvin: !input start_kelvin
   end_brightness: !input end_brightness
@@ -140,19 +127,5 @@ action:
       color_temp_kelvin: "{{ end_kelvin }}"
       transition: "{{ duration | int * 60 }}"
 
-  # Wait for the transition to finish
-  - delay:
-      minutes: "{{ duration }}"
-
-  # Optional timeout
-  - if:
-      - condition: template
-        value_template: "{{ light_timeout | int > 0 and not is_state(target_light, 'off') }}"
-    then:
-      - delay:
-          minutes: "{{ light_timeout }}"
-      - service: light.turn_off
-        target:
-          entity_id: !input target_light
 
 mode: parallel
