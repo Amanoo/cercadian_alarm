@@ -1,11 +1,13 @@
 blueprint:
   name: Cancel Light Sunrise on Manual Change
   description: >
-    Cancels a running Light Sunrise script when the user manually changes
-    the target light. Uses Home Assistant context to distinguish user
-    changes from script-driven changes — any change made through the HA
-    UI or API cancels immediately, regardless of size. A fallback threshold
-    catches physical switch / remote changes that lack HA context.
+    Cancels a running Light Sunrise script when a manual change is detected.
+    Compares observed light changes against the script's stored targets
+    (in input_number helpers). If brightness or kelvin is moving AWAY from
+    the target, it's a manual change and the script is cancelled. If moving
+    toward the target, it's the script's transition — ignored.
+    Requires helpers: input_number.sunrise_target_brightness and
+    input_number.sunrise_target_kelvin.
   domain: automation
   input:
     target_light:
@@ -25,37 +27,10 @@ blueprint:
           filter:
             domain: script
 
-    physical_brightness_threshold:
-      name: 🔆 Physical Change Brightness Threshold (%)
-      description: >-
-        Fallback threshold for physical switch / remote changes that
-        have no HA context. Changes via the HA UI always cancel instantly
-        regardless of this value.
-      default: 3
-      selector:
-        number:
-          min: 1
-          max: 50
-          step: 1
-          mode: slider
-
-    physical_kelvin_threshold:
-      name: 🌡️ Physical Change Kelvin Threshold
-      description: >-
-        Fallback Kelvin threshold for physical / remote changes.
-        Changes via the HA UI always cancel instantly regardless of this value.
-      default: 30
-      selector:
-        number:
-          min: 10
-          max: 500
-          step: 10
-          mode: slider
-
 variables:
   sunrise_script_entity: !input sunrise_script
-  bright_threshold: !input physical_brightness_threshold
-  kelv_threshold: !input physical_kelvin_threshold
+  bri_helper: input_number.sunrise_target_brightness
+  kelvin_helper: input_number.sunrise_target_kelvin
 
 triggers:
   - entity_id: !input target_light
@@ -66,31 +41,24 @@ conditions:
   - condition: template
     value_template: "{{ states(sunrise_script_entity) == 'on' }}"
 
-  # Ignore changes caused by automations / scripts (the sunrise script itself)
+  # Check if the observed change does NOT match the script's trajectory.
+  # The script stores its current target brightness (%) and kelvin in helpers.
+  # If the light is moving AWAY from either target, it's a manual change.
   - condition: template
     value_template: >
-      {{ trigger.to_state.context.parent_id is none
-         or trigger.to_state.context.parent_id == '' }}
-
-  # Cancel on:
-  #   - Any user change via HA UI/API (user_id is set) — no threshold
-  #   - Light turned off by any means
-  #   - Physical/external change exceeding the fallback threshold
-  - condition: template
-    value_template: >
-      {% set is_user = trigger.to_state.context.user_id is not none
-                        and trigger.to_state.context.user_id != '' %}
-      {% set is_off = trigger.to_state.state == 'off' %}
-      {% if is_user or is_off %}
-        true
-      {% else %}
-        {% set old_bri = trigger.from_state.attributes.brightness | int(0) %}
-        {% set new_bri = trigger.to_state.attributes.brightness | int(0) %}
-        {% set old_k = trigger.from_state.attributes.color_temp_kelvin | int(0) %}
-        {% set new_k = trigger.to_state.attributes.color_temp_kelvin | int(0) %}
-        {{ (new_bri - old_bri) | abs > (255 * bright_threshold / 100)
-           or (new_k - old_k) | abs > kelv_threshold }}
-      {% endif %}
+      {% set target_bri = states(bri_helper) | float(0) * 2.55 %}
+      {% set target_k = states(kelvin_helper) | float(0) %}
+      {% set old_bri = trigger.from_state.attributes.brightness | float(0) %}
+      {% set new_bri = trigger.to_state.attributes.brightness | float(0) %}
+      {% set old_k = trigger.from_state.attributes.color_temp_kelvin | float(0) %}
+      {% set new_k = trigger.to_state.attributes.color_temp_kelvin | float(0) %}
+      {% set bri_was = (old_bri - target_bri) | abs %}
+      {% set bri_now = (new_bri - target_bri) | abs %}
+      {% set k_was = (old_k - target_k) | abs %}
+      {% set k_now = (new_k - target_k) | abs %}
+      {% set bri_off_track = bri_now > bri_was + 5 %}
+      {% set k_off_track = k_now > k_was + 30 %}
+      {{ trigger.to_state.state == 'off' or bri_off_track or k_off_track }}
 
 actions:
   - target:
